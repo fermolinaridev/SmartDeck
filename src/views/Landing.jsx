@@ -102,7 +102,7 @@ export function Landing({ onEnter }) {
       </main>
 
       <footer className="py-8 text-center text-xs text-slate-400">
-        SmartDeck · PUC-Campinas · Práticas Empreendedoras
+        SmartDeck · A evolução do estudo
       </footer>
     </div>
   );

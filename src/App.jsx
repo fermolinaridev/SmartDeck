@@ -210,7 +210,7 @@ export default function App() {
         </AnimatePresence>
       </main>
       <footer className="text-center text-xs text-slate-400 dark:text-slate-600 py-8">
-        SmartDeck · PUC-Campinas · Práticas Empreendedoras
+        SmartDeck · A evolução do estudo
       </footer>
     </div>
   );
