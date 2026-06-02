@@ -1,12 +1,13 @@
-import { Moon, Sun, Home, Library } from 'lucide-react';
+import { Moon, Sun, Home, Library, Settings as SettingsIcon, LogOut, Sparkles } from 'lucide-react';
 import { Logo } from './Logo.jsx';
+import { initialFor } from '../lib/auth.js';
 
-export function Header({ view, setView, dark, toggleDark }) {
+export function Header({ view, setView, dark, toggleDark, user, onLogout }) {
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-950/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <button
-          onClick={() => setView('home')}
+          onClick={() => setView('dashboard')}
           className="flex items-center gap-3 group"
         >
           <Logo size={28} />
@@ -19,18 +20,11 @@ export function Header({ view, setView, dark, toggleDark }) {
         </button>
 
         <nav className="flex items-center gap-1">
-          <NavButton
-            active={view === 'home'}
-            onClick={() => setView('home')}
-            icon={<Home size={16} />}
-            label="Início"
-          />
-          <NavButton
-            active={view === 'list'}
-            onClick={() => setView('list')}
-            icon={<Library size={16} />}
-            label="Decks"
-          />
+          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Home size={16} />} label="Início" />
+          <NavButton active={view === 'generate'} onClick={() => setView('generate')} icon={<Sparkles size={16} />} label="Gerar" />
+          <NavButton active={view === 'decks'} onClick={() => setView('decks')} icon={<Library size={16} />} label="Decks" />
+          <NavButton active={view === 'settings'} onClick={() => setView('settings')} icon={<SettingsIcon size={16} />} label="Config." />
+
           <button
             onClick={toggleDark}
             className="ml-2 w-9 h-9 grid place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
@@ -38,6 +32,21 @@ export function Header({ view, setView, dark, toggleDark }) {
           >
             {dark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
+
+          {user && (
+            <div className="ml-2 flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-brand-400 text-white grid place-items-center text-sm font-extrabold">
+                {initialFor(user.name)}
+              </div>
+              <button
+                onClick={onLogout}
+                className="w-9 h-9 grid place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+                title="Sair"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          )}
         </nav>
       </div>
     </header>
@@ -55,7 +64,7 @@ function NavButton({ active, onClick, icon, label }) {
       }`}
     >
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span className="hidden md:inline">{label}</span>
     </button>
   );
 }

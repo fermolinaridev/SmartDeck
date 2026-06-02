@@ -13,8 +13,11 @@ async function req(path, opts = {}) {
 }
 
 export const api = {
-  generate: (topic, text) =>
-    req('/api/generate', { method: 'POST', body: JSON.stringify({ topic, text }) }),
+  generate: (topic, text, count, prefs) =>
+    req('/api/generate', {
+      method: 'POST',
+      body: JSON.stringify({ topic, text, count, prefs }),
+    }),
   listDecks: () => req('/api/decks'),
   getDeck: (id) => req('/api/decks/' + id),
   deleteDeck: (id) => req('/api/decks/' + id, { method: 'DELETE' }),

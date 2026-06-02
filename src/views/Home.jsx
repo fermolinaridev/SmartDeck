@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileUp, Sparkles, Brain, Repeat2, Target, ArrowRight, X } from 'lucide-react';
+import { FileUp, Sparkles, ChevronLeft, ArrowRight, X, Layers, Settings as SettingsIcon } from 'lucide-react';
 import { extractPdfText } from '../lib/pdf.js';
+import { defaultCountFor } from '../lib/prefs.js';
 
 const SUGGESTIONS = [
   'Biologia celular',
@@ -12,9 +13,13 @@ const SUGGESTIONS = [
   'Inglês',
 ];
 
-export function Home({ onGenerate, busy }) {
-  const [topic, setTopic] = useState('');
+const MIN_COUNT = 3;
+const MAX_COUNT = 30;
+
+export function Home({ onGenerate, busy, prefs, onBack, onOpenSettings }) {
+  const [topic, setTopic] = useState(prefs?.focus || '');
   const [text, setText] = useState('');
+  const [count, setCount] = useState(defaultCountFor(prefs));
   const [pdfName, setPdfName] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const fileRef = useRef(null);
@@ -44,7 +49,7 @@ export function Home({ onGenerate, busy }) {
   function submit(e) {
     e.preventDefault();
     if (!topic.trim() && !text.trim()) return;
-    onGenerate(topic.trim(), text.trim());
+    onGenerate(topic.trim(), text.trim(), count);
   }
 
   return (
@@ -54,18 +59,33 @@ export function Home({ onGenerate, busy }) {
       transition={{ duration: 0.4 }}
       className="py-10"
     >
+      <div className="flex items-center justify-between mb-4">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="text-sm text-slate-500 hover:text-brand-700 dark:hover:text-brand-300 inline-flex items-center gap-1"
+          >
+            <ChevronLeft size={14} /> Voltar
+          </button>
+        )}
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="text-xs text-slate-500 hover:text-brand-700 dark:hover:text-brand-300 inline-flex items-center gap-1"
+          >
+            <SettingsIcon size={12} /> Preferências de estudo
+          </button>
+        )}
+      </div>
       <div className="grid md:grid-cols-2 gap-12 items-center">
         <div>
           <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[.18em] text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/40 px-3 py-1 rounded-full font-semibold">
-            <Sparkles size={12} /> Edtech · IA + ciência cognitiva
+            <Sparkles size={12} /> Gerador de decks
           </div>
           <h1 className="mt-4 text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.05]">
-            Pare de estudar{' '}
-            <span className="text-slate-400 line-through">mais</span>.
-            <br />
-            Comece a estudar{' '}
+            Crie um deck{' '}
             <span className="bg-gradient-to-r from-brand-600 to-brand-400 bg-clip-text text-transparent">
-              melhor
+              em segundos
             </span>
             .
           </h1>
@@ -94,6 +114,8 @@ export function Home({ onGenerate, busy }) {
                 className="input resize-none scroll-thin"
               />
             </Field>
+
+            <CountField count={count} setCount={setCount} />
 
             <div className="flex items-center gap-3 flex-wrap">
               <input
@@ -157,9 +179,81 @@ export function Home({ onGenerate, busy }) {
 
         <Hero />
       </div>
-
-      <FeatureGrid />
     </motion.section>
+  );
+}
+
+function CountField({ count, setCount }) {
+  const presets = [5, 8, 12, 20];
+  function clamp(n) {
+    return Math.max(MIN_COUNT, Math.min(MAX_COUNT, Math.round(Number(n) || 0)));
+  }
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400 inline-flex items-center gap-1.5">
+          <Layers size={12} /> Quantos cards gerar
+        </span>
+        <span className="text-[11px] text-slate-400">
+          mín {MIN_COUNT} · máx {MAX_COUNT}
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-center gap-3">
+        <input
+          type="range"
+          min={MIN_COUNT}
+          max={MAX_COUNT}
+          step={1}
+          value={count}
+          onChange={(e) => setCount(clamp(e.target.value))}
+          className="flex-1 accent-brand-600 cursor-pointer"
+        />
+        <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setCount(clamp(count - 1))}
+            className="px-2.5 py-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="diminuir"
+          >
+            −
+          </button>
+          <input
+            type="number"
+            min={MIN_COUNT}
+            max={MAX_COUNT}
+            value={count}
+            onChange={(e) => setCount(clamp(e.target.value))}
+            className="w-12 text-center text-sm font-bold bg-transparent focus:outline-none [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+          <button
+            type="button"
+            onClick={() => setCount(clamp(count + 1))}
+            className="px-2.5 py-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="aumentar"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-2 flex gap-1.5 flex-wrap">
+        {presets.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setCount(p)}
+            className={`text-[11px] px-2.5 py-1 rounded-full border transition ${
+              count === p
+                ? 'bg-brand-600 text-white border-brand-600'
+                : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 hover:border-brand-500 text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            {p} cards
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -232,48 +326,3 @@ function Stat({ big, small }) {
   );
 }
 
-function FeatureGrid() {
-  const features = [
-    {
-      icon: <Brain size={20} />,
-      title: 'Active Recall',
-      desc: 'Testar a memória em vez de reler. É assim que o cérebro fixa de verdade.',
-    },
-    {
-      icon: <Repeat2 size={20} />,
-      title: 'Spaced Repetition',
-      desc: 'Algoritmo SM-2 agenda cada revisão no ponto ótimo entre lembrar e esquecer.',
-    },
-    {
-      icon: <Target size={20} />,
-      title: 'Foco nos pontos fracos',
-      desc: 'A IA detecta onde você mais erra e concentra os próximos blocos exatamente ali.',
-    },
-  ];
-  return (
-    <section className="mt-24">
-      <div className="text-center mb-10">
-        <div className="text-xs uppercase tracking-[.18em] text-brand-700 dark:text-brand-300 font-semibold">
-          O molho secreto
-        </div>
-        <h2 className="mt-2 text-3xl font-extrabold tracking-tight">
-          Não é mais um app de flashcards
-        </h2>
-        <p className="mt-3 text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
-          Anki e Quizlet são ferramentas passivas. O SmartDeck é uma IA educacional ativa.
-        </p>
-      </div>
-      <div className="grid md:grid-cols-3 gap-4">
-        {features.map((f) => (
-          <div key={f.title} className="card p-6">
-            <div className="w-10 h-10 grid place-items-center rounded-lg bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300">
-              {f.icon}
-            </div>
-            <h3 className="mt-4 font-bold text-lg">{f.title}</h3>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{f.desc}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}

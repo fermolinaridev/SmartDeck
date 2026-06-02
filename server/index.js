@@ -85,37 +85,106 @@ const SEED_BANK = {
   ],
 };
 
-function generateFromTopic(topic, text) {
-  const key = (topic || '').toLowerCase().trim();
-  for (const seedKey of Object.keys(SEED_BANK)) {
-    if (key.includes(seedKey) || seedKey.includes(key)) {
-      return SEED_BANK[seedKey].map(([q, a]) => ({ q, a }));
-    }
-  }
+const MIN_COUNT = 3;
+const MAX_COUNT = 30;
+
+function buildGenericCards(topic, text) {
   const t = topic || 'o tema enviado';
-  const base = [
+  const cards = [
     [`O que é ${t}?`, `Conceito central de ${t} — definição extraída automaticamente pela IA a partir do seu material.`],
     [`Principais características de ${t}`, `A IA identifica de 3 a 5 atributos essenciais do conteúdo enviado.`],
     [`Aplicação prática de ${t}`, `Exemplo concreto extraído do contexto do material para ancorar a memória.`],
     [`Erro comum sobre ${t}`, `Distinção que costuma confundir alunos — a IA destaca para reforço.`],
     [`Comparação: ${t} vs. tópicos próximos`, `Diferenças-chave identificadas no texto para evitar confusão na hora da prova.`],
     [`Resumo em uma frase: ${t}`, `Síntese de alto nível para revisão rápida pré-prova.`],
+    [`Origem e contexto de ${t}`, `Background histórico/teórico que ancora o significado do conceito.`],
+    [`Tipos ou classificações de ${t}`, `Subdivisões mais cobradas em prova, com critérios de distinção.`],
+    [`Vantagens de ${t}`, `Pontos positivos destacados no material — bons para questões de "assinale a alternativa correta".`],
+    [`Limitações ou críticas a ${t}`, `Pontos fracos / contraposições — frequentes em questões discursivas.`],
+    [`Exemplo concreto de ${t} em situação real`, `Caso prático para ancorar a memória episódica ao conceito.`],
+    [`Termos relacionados a ${t}`, `Vocabulário associado — útil para mapas mentais e revisão rápida.`],
+    [`Por que ${t} é importante na prática?`, `Justificativa de relevância — costuma cair em questões interpretativas.`],
+    [`Definição em uma palavra: ${t}`, `Síntese máxima — gatilho mnemônico para o conceito completo.`],
+    [`Pergunta provocativa sobre ${t}`, `Variante de pergunta que força raciocínio em vez de memorização literal.`],
+    [`Pegadinha comum envolvendo ${t}`, `Armadilha clássica em provas — a IA destaca para você não cair.`],
   ];
   if (text && text.length > 80) {
     const snippet = text.trim().slice(0, 160).replace(/\s+/g, ' ');
-    base.push([`Trecho-chave do material`, `"${snippet}…" — destacado pela IA por alta densidade conceitual.`]);
+    cards.push([`Trecho-chave do material`, `"${snippet}…" — destacado pela IA por alta densidade conceitual.`]);
     const words = text.toLowerCase().match(/[a-záàâãéêíóôõúç]{6,}/g) || [];
     const freq = {};
     words.forEach((w) => (freq[w] = (freq[w] || 0) + 1));
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 3).map((e) => e[0]);
     if (top.length) {
-      base.push([
+      cards.push([
         `Termos recorrentes no material`,
         `${top.join(', ')} — alta frequência indica conceitos-âncora para revisão.`,
       ]);
     }
   }
-  return base.map(([q, a]) => ({ q, a }));
+  return cards.map(([q, a]) => ({ q, a }));
+}
+
+function clampCount(n) {
+  const v = Number.isFinite(+n) ? Math.round(+n) : 8;
+  return Math.max(MIN_COUNT, Math.min(MAX_COUNT, v));
+}
+
+function applyPrefs(cards, prefs) {
+  if (!prefs) return cards;
+  const length = prefs.length || 'medio';
+  const difficulty = prefs.difficulty || 'intermediario';
+  return cards.map((c) => {
+    let a = c.a;
+    if (length === 'curto') {
+      const firstSentence = a.split(/(?<=[.!?])\s/)[0];
+      a = firstSentence.endsWith('.') ? firstSentence : firstSentence + '.';
+    } else if (length === 'longo') {
+      a = a + ' Aprofundamento: pense em casos-limite, exceções e como esse conceito interage com tópicos próximos do programa.';
+    }
+    if (difficulty === 'avancado') {
+      a = a + ' Provoque-se: que hipóteses subjacentes esse conceito assume? Existe escola rival?';
+    } else if (difficulty === 'basico') {
+      a = 'Em palavras simples: ' + a;
+    }
+    return { ...c, a };
+  });
+}
+
+function generateFromTopic(topic, text, count, prefs) {
+  const defaultCount = prefs?.pace === 'rapido' ? 5 : prefs?.pace === 'profundo' ? 15 : 8;
+  const target = clampCount(count ?? defaultCount);
+  const key = (topic || '').toLowerCase().trim();
+  let seeded = [];
+  for (const seedKey of Object.keys(SEED_BANK)) {
+    if (key.includes(seedKey) || seedKey.includes(key)) {
+      seeded = SEED_BANK[seedKey].map(([q, a]) => ({ q, a }));
+      break;
+    }
+  }
+  const result = [...seeded.slice(0, target)];
+  if (result.length < target) {
+    const generics = buildGenericCards(topic, text);
+    const seen = new Set(result.map((c) => c.q));
+    for (const g of generics) {
+      if (result.length >= target) break;
+      if (!seen.has(g.q)) {
+        result.push(g);
+        seen.add(g.q);
+      }
+    }
+    // se ainda faltar (texto curto + tema sem seed), gera variantes numeradas
+    let i = 2;
+    while (result.length < target) {
+      const variant = {
+        q: `Aprofundamento ${i} sobre ${topic || 'o tema'}`,
+        a: `Card complementar gerado pela IA para atingir o tamanho de baralho que você escolheu.`,
+      };
+      result.push(variant);
+      i += 1;
+    }
+  }
+  return result;
 }
 
 function newCardState() {
@@ -160,9 +229,10 @@ const app = express();
 app.use(express.json({ limit: '5mb' }));
 
 app.post('/api/generate', (req, res) => {
-  const { topic, text } = req.body || {};
+  const { topic, text, count, prefs } = req.body || {};
   if (!topic && !text) return res.status(400).json({ error: 'Envie ao menos um tema ou texto.' });
-  const cards = generateFromTopic(topic, text).map((c) => ({
+  const raw = generateFromTopic(topic, text, count, prefs);
+  const cards = applyPrefs(raw, prefs).map((c) => ({
     id: crypto.randomUUID(),
     q: c.q,
     a: c.a,
