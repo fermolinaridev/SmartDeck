@@ -81,49 +81,77 @@ export function Study({ deck, onReview, onExit, onDone }) {
 
       <div className="[perspective:1200px]">
         <motion.div
-          className="relative w-full h-80 [transform-style:preserve-3d]"
+          className="relative w-full h-[26rem] [transform-style:preserve-3d]"
           animate={{ rotateY: flipped ? 180 : 0 }}
           transition={{ duration: 0.55, ease: [0.4, 0.2, 0.2, 1] }}
         >
           {/* Front */}
-          <div className="card absolute inset-0 p-8 flex flex-col [backface-visibility:hidden]">
-            <div className="text-[10px] uppercase tracking-widest text-brand-600 dark:text-brand-300 font-semibold">
-              Pergunta
-            </div>
-            <div className="flex-1 grid place-items-center">
-              <div className="text-2xl md:text-3xl font-bold text-center leading-tight">
-                {card.q}
+          <div className="card absolute inset-0 flex flex-col overflow-hidden [backface-visibility:hidden]">
+            {card.image && (
+              <div className="h-40 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative">
+                <img
+                  src={card.image}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                />
+                <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white dark:from-slate-900 to-transparent" />
               </div>
+            )}
+            <div className="flex-1 p-6 flex flex-col">
+              <div className="text-[10px] uppercase tracking-widest text-brand-600 dark:text-brand-300 font-semibold">
+                Pergunta
+              </div>
+              <div className="flex-1 grid place-items-center">
+                <div className="text-2xl md:text-3xl font-bold text-center leading-tight">
+                  {card.q}
+                </div>
+              </div>
+              <button
+                onClick={() => setFlipped(true)}
+                className="btn-primary mx-auto"
+              >
+                Mostrar resposta <span className="kbd ml-1">Espaço</span>
+              </button>
             </div>
-            <button
-              onClick={() => setFlipped(true)}
-              className="btn-primary mx-auto"
-            >
-              Mostrar resposta <span className="kbd ml-1">Espaço</span>
-            </button>
           </div>
 
           {/* Back */}
-          <div className="card absolute inset-0 p-8 flex flex-col [backface-visibility:hidden] [transform:rotateY(180deg)] border-brand-300 dark:border-brand-800">
-            <div className="text-[10px] uppercase tracking-widest text-brand-600 dark:text-brand-300 font-semibold">
-              Resposta
-            </div>
-            <div className="flex-1 grid place-items-center">
-              <div className="text-lg md:text-xl text-center text-slate-700 dark:text-slate-200 leading-relaxed">
-                {card.a}
+          <div className="card absolute inset-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] border-brand-300 dark:border-brand-800">
+            {card.image && (
+              <div className="h-32 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative">
+                <img
+                  src={card.image}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                />
+                <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white dark:from-slate-900 to-transparent" />
               </div>
-            </div>
-            <div className="grid grid-cols-4 gap-2 mt-3">
-              {GRADES.map((g) => (
-                <button
-                  key={g.q}
-                  onClick={() => handleReview(g.q)}
-                  className={`py-2.5 rounded-lg text-xs font-semibold transition flex flex-col gap-0.5 items-center ${g.color}`}
-                >
-                  <span>{g.label}</span>
-                  <span className="kbd">{g.kbd}</span>
-                </button>
-              ))}
+            )}
+            <div className="flex-1 p-6 flex flex-col">
+              <div className="text-[10px] uppercase tracking-widest text-brand-600 dark:text-brand-300 font-semibold">
+                Resposta
+              </div>
+              <div className="flex-1 grid place-items-center">
+                <div className="text-base md:text-lg text-center text-slate-700 dark:text-slate-200 leading-relaxed">
+                  {card.a}
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-2 mt-3">
+                {GRADES.map((g) => (
+                  <button
+                    key={g.q}
+                    onClick={() => handleReview(g.q)}
+                    className={`py-2.5 rounded-lg text-xs font-semibold transition flex flex-col gap-0.5 items-center ${g.color}`}
+                  >
+                    <span>{g.label}</span>
+                    <span className="kbd">{g.kbd}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </motion.div>

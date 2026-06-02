@@ -81,7 +81,20 @@ function CardRow({ index, card }) {
   const due = card.state.due <= Date.now();
   const mastered = card.state.reps >= 3 && card.state.ef >= 2.5;
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 hover:border-brand-400 dark:hover:border-brand-700 transition">
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 hover:border-brand-400 dark:hover:border-brand-700 transition flex gap-3">
+      {card.image && (
+        <div className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 grid place-items-center">
+          <img
+            src={card.image}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover"
+            onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+          />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
       <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-slate-400">
         <span>Card {index + 1}</span>
         {mastered && (
@@ -97,6 +110,7 @@ function CardRow({ index, card }) {
         <span>EF {card.state.ef.toFixed(2)}</span>
         <span>Intervalo {card.state.interval}d</span>
         <span>Reps {card.state.reps}</span>
+      </div>
       </div>
     </div>
   );

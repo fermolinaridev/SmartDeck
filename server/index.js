@@ -225,28 +225,156 @@ function deckStats(deck) {
   return { total, seen, due, mastered, avgEf: +avgEf.toFixed(2) };
 }
 
+// ---------- imagens da Wikipedia ----------
+
+const imageCache = new Map(); // term (lower) -> { url, attribution } | null
+const NEGATIVE_CACHE_TTL = 60 * 60 * 1000; // 1h
+
+const QUESTION_PREFIXES = [
+  /^o que (é|são) /i,
+  /^qual (é )?(a |o |as |os )?/i,
+  /^quais (são )?(a |o |as |os )?/i,
+  /^diferença entre /i,
+  /^definição (de |em uma palavra: )/i,
+  /^função (da|do|de) /i,
+  /^papel (da|do|de) /i,
+  /^significado de /i,
+  /^tradução: /i,
+  /^past simple de /i,
+  /^present perfect: /i,
+  /^quando usar /i,
+  /^princípio (da|do) /i,
+  /^comparação: /i,
+  /^resumo em uma frase: /i,
+  /^principais características de /i,
+  /^aplicação prática de /i,
+  /^erro comum sobre /i,
+  /^pegadinha comum envolvendo /i,
+  /^termos relacionados a /i,
+  /^origem e contexto de /i,
+  /^tipos ou classificações de /i,
+  /^vantagens de /i,
+  /^limitações ou críticas a /i,
+  /^exemplo concreto de /i,
+  /^por que /i,
+  /^pergunta provocativa sobre /i,
+  /^trecho-chave do material/i,
+  /^termos recorrentes no material/i,
+  /^aprofundamento \d+ sobre /i,
+];
+
+function extractSubject(question) {
+  let s = question || '';
+  for (const re of QUESTION_PREFIXES) s = s.replace(re, '');
+  s = s
+    .replace(/[?:'"]/g, '')
+    .replace(/ vs\..*$/i, '')
+    .replace(/ em situação real$/i, '')
+    .replace(/ no organismo$/i, '')
+    .trim();
+  // remove artigos iniciais (a, o, as, os, um, uma)
+  s = s.replace(/^(a|o|as|os|um|uma|de|da|do|das|dos)\s+/i, '');
+  // pega no máximo 4 palavras pra manter foco
+  return s.split(/\s+/).slice(0, 4).join(' ');
+}
+
+async function fetchWikiImage(term) {
+  if (!term) return null;
+  const key = term.toLowerCase().trim();
+  if (!key) return null;
+  const cached = imageCache.get(key);
+  if (cached !== undefined) {
+    if (cached.expires && cached.expires < Date.now()) {
+      imageCache.delete(key);
+    } else if (cached.none) {
+      return null;
+    } else {
+      return cached;
+    }
+  }
+
+  for (const lang of ['pt', 'en']) {
+    try {
+      const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'SmartDeck/0.3 (demo; contato@smartdeck.app)',
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(2500),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const src = data.thumbnail?.source || data.originalimage?.source;
+      if (src) {
+        const value = {
+          url: src,
+          attribution: `Wikipedia (${lang})`,
+          pageUrl: data.content_urls?.desktop?.page,
+        };
+        imageCache.set(key, value);
+        return value;
+      }
+    } catch (e) {
+      // segue para próximo idioma
+    }
+  }
+  imageCache.set(key, { expires: Date.now() + NEGATIVE_CACHE_TTL, none: true });
+  return null;
+}
+
+async function enrichWithImages(cards, deckTopic) {
+  const fallback = deckTopic ? await fetchWikiImage(deckTopic) : null;
+  const fetched = await Promise.all(
+    cards.map(async (c) => {
+      const subject = extractSubject(c.q);
+      let img = null;
+      if (subject && subject.length > 1) img = await fetchWikiImage(subject);
+      if (!img) img = fallback;
+      return img;
+    }),
+  );
+  return cards.map((c, i) => {
+    const img = fetched[i];
+    if (img && !img.none) {
+      return { ...c, image: img.url, imageAttribution: img.attribution, imagePage: img.pageUrl };
+    }
+    return c;
+  });
+}
+
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 
-app.post('/api/generate', (req, res) => {
-  const { topic, text, count, prefs } = req.body || {};
-  if (!topic && !text) return res.status(400).json({ error: 'Envie ao menos um tema ou texto.' });
-  const raw = generateFromTopic(topic, text, count, prefs);
-  const cards = applyPrefs(raw, prefs).map((c) => ({
-    id: crypto.randomUUID(),
-    q: c.q,
-    a: c.a,
-    state: newCardState(),
-  }));
-  const deck = {
-    id: crypto.randomUUID(),
-    title: topic || (text ? text.trim().slice(0, 60) + '…' : 'Material sem título'),
-    createdAt: Date.now(),
-    cards,
-  };
-  decks.set(deck.id, deck);
-  persist();
-  setTimeout(() => res.json(deck), 600);
+app.post('/api/generate', async (req, res) => {
+  try {
+    const { topic, text, count, prefs } = req.body || {};
+    if (!topic && !text) return res.status(400).json({ error: 'Envie ao menos um tema ou texto.' });
+    const raw = generateFromTopic(topic, text, count, prefs);
+    const styled = applyPrefs(raw, prefs);
+    const enriched = await enrichWithImages(styled, topic);
+    const cards = enriched.map((c) => ({
+      id: crypto.randomUUID(),
+      q: c.q,
+      a: c.a,
+      image: c.image || null,
+      imageAttribution: c.imageAttribution || null,
+      imagePage: c.imagePage || null,
+      state: newCardState(),
+    }));
+    const deck = {
+      id: crypto.randomUUID(),
+      title: topic || (text ? text.trim().slice(0, 60) + '…' : 'Material sem título'),
+      createdAt: Date.now(),
+      cards,
+    };
+    decks.set(deck.id, deck);
+    persist();
+    res.json(deck);
+  } catch (e) {
+    console.error('generate error:', e);
+    res.status(500).json({ error: 'Falha ao gerar deck.' });
+  }
 });
 
 app.get('/api/decks', (req, res) => {
