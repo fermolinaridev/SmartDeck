@@ -102,6 +102,19 @@ export default function App() {
     }
   }
 
+  async function handleReimage(cardId) {
+    if (!deck) return;
+    try {
+      const { card } = await api.reimage(deck.id, cardId);
+      setDeck((d) => ({
+        ...d,
+        cards: d.cards.map((c) => (c.id === cardId ? card : c)),
+      }));
+    } catch (e) {
+      alert('Não foi possível trocar a imagem: ' + e.message);
+    }
+  }
+
   async function handleReview(cardId, quality) {
     if (!deck) return;
     try {
@@ -170,6 +183,7 @@ export default function App() {
               onStudy={() => setViewRaw('study')}
               onHome={() => setViewRaw('generate')}
               onDelete={handleDelete}
+              onReimage={handleReimage}
             />
           )}
           {view === 'study' && deck && (
@@ -177,6 +191,7 @@ export default function App() {
               key="study"
               deck={deck}
               onReview={handleReview}
+              onReimage={handleReimage}
               onExit={() => setViewRaw('deck')}
               onDone={() => setViewRaw('done')}
             />

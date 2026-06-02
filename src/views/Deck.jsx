@@ -2,8 +2,9 @@ import { motion } from 'framer-motion';
 import { Play, Plus, ChevronLeft, Trash2 } from 'lucide-react';
 import { StatGrid } from '../components/StatGrid.jsx';
 import { ProgressChart } from '../components/ProgressChart.jsx';
+import { CardImage } from '../components/CardImage.jsx';
 
-export function Deck({ deck, onStudy, onHome, onDelete }) {
+export function Deck({ deck, onStudy, onHome, onDelete, onReimage }) {
   const stats = deck.stats || {
     total: deck.cards.length,
     seen: 0,
@@ -60,7 +61,7 @@ export function Deck({ deck, onStudy, onHome, onDelete }) {
           <div className="font-semibold mb-3">Cards do deck</div>
           <div className="space-y-2 max-h-[28rem] overflow-y-auto scroll-thin pr-1">
             {deck.cards.map((c, i) => (
-              <CardRow key={c.id} index={i} card={c} />
+              <CardRow key={c.id} index={i} card={c} onReimage={onReimage} />
             ))}
           </div>
         </div>
@@ -77,22 +78,13 @@ export function Deck({ deck, onStudy, onHome, onDelete }) {
   );
 }
 
-function CardRow({ index, card }) {
+function CardRow({ index, card, onReimage }) {
   const due = card.state.due <= Date.now();
   const mastered = card.state.reps >= 3 && card.state.ef >= 2.5;
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 hover:border-brand-400 dark:hover:border-brand-700 transition flex gap-3">
       {card.image && (
-        <div className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 grid place-items-center">
-          <img
-            src={card.image}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover"
-            onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
-          />
-        </div>
+        <CardImage card={card} onReimage={onReimage} variant="thumb" />
       )}
       <div className="flex-1 min-w-0">
       <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-slate-400">

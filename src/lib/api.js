@@ -26,4 +26,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ cardId, quality }),
     }),
+  reimage: (deckId, cardId) =>
+    req(`/api/decks/${deckId}/cards/${cardId}/reimage`, { method: 'POST' }),
 };

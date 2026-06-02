@@ -278,64 +278,151 @@ function extractSubject(question) {
   return s.split(/\s+/).slice(0, 4).join(' ');
 }
 
-async function fetchWikiImage(term) {
-  if (!term) return null;
-  const key = term.toLowerCase().trim();
-  if (!key) return null;
+const UA = 'SmartDeck/0.3 (demo; contato@smartdeck.app)';
+
+const VALID_IMAGE_MIME = /^image\/(jpeg|png|svg\+xml|webp|gif)$/;
+const SKIP_TITLE_RE = /(icon|logo|flag|coat[_ ]of[_ ]arms|seal[_ ]of|wiki.png|commons-logo|favicon)/i;
+
+async function commonsRequest(query) {
+  const url =
+    'https://commons.wikimedia.org/w/api.php' +
+    '?action=query&format=json' +
+    '&generator=search&gsrnamespace=6&gsrlimit=10' +
+    `&gsrsearch=${encodeURIComponent(query)}` +
+    '&prop=imageinfo&iiprop=url%7Cmime%7Csize&iiurlwidth=500';
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: AbortSignal.timeout(3500),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const pages = Object.values(data.query?.pages || {});
+    pages.sort((a, b) => (a.index || 99) - (b.index || 99));
+    const out = [];
+    for (const p of pages) {
+      const ii = p.imageinfo?.[0];
+      if (!ii) continue;
+      if (ii.mime && !VALID_IMAGE_MIME.test(ii.mime)) continue;
+      if (p.title && SKIP_TITLE_RE.test(p.title)) continue;
+      // descarta resultados com título longuíssimo (geralmente capa de livro/relatório)
+      if (p.title && p.title.length > 90) continue;
+      const w = ii.thumbwidth || ii.width || 0;
+      const h = ii.thumbheight || ii.height || 0;
+      if (w && h && (w < 160 || h < 120)) continue;
+      const src = ii.thumburl || ii.url;
+      if (!src) continue;
+      out.push({
+        url: src,
+        attribution: 'Wikimedia Commons',
+        pageUrl: `https://commons.wikimedia.org/wiki/${encodeURIComponent(p.title)}`,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function commonsSearchCandidates(term, hint) {
+  // 1) busca pura pelo termo (melhor relevância na maioria dos casos)
+  let results = await commonsRequest(term);
+  // 2) se vier vazio, tenta com a dica do tópico para resolver ambiguidade
+  if (results.length === 0 && hint && hint.toLowerCase() !== term.toLowerCase()) {
+    results = await commonsRequest(`${term} ${hint}`);
+  }
+  return results;
+}
+
+async function wikipediaSummary(term, lang) {
+  try {
+    const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const src = data.thumbnail?.source || data.originalimage?.source;
+    if (!src) return null;
+    return {
+      url: src,
+      attribution: `Wikipedia (${lang})`,
+      pageUrl: data.content_urls?.desktop?.page,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchImageCandidates(term, hint) {
+  if (!term) return [];
+  const key = 'cand:' + (hint ? `${term}|${hint}` : term).toLowerCase().trim();
   const cached = imageCache.get(key);
   if (cached !== undefined) {
     if (cached.expires && cached.expires < Date.now()) {
       imageCache.delete(key);
     } else if (cached.none) {
-      return null;
-    } else {
-      return cached;
+      return [];
+    } else if (Array.isArray(cached.candidates)) {
+      return cached.candidates;
     }
   }
 
-  for (const lang of ['pt', 'en']) {
-    try {
-      const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`;
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'SmartDeck/0.3 (demo; contato@smartdeck.app)',
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(2500),
-      });
-      if (!res.ok) continue;
-      const data = await res.json();
-      const src = data.thumbnail?.source || data.originalimage?.source;
-      if (src) {
-        const value = {
-          url: src,
-          attribution: `Wikipedia (${lang})`,
-          pageUrl: data.content_urls?.desktop?.page,
-        };
-        imageCache.set(key, value);
-        return value;
-      }
-    } catch (e) {
-      // segue para próximo idioma
-    }
+  const candidates = await commonsSearchCandidates(term, hint);
+  // se Commons não devolveu nada, tenta a thumbnail da página como única opção
+  if (candidates.length === 0) {
+    const summary = (await wikipediaSummary(term, 'pt')) || (await wikipediaSummary(term, 'en'));
+    if (summary) candidates.push(summary);
+  }
+
+  if (candidates.length > 0) {
+    imageCache.set(key, { candidates });
+    return candidates;
   }
   imageCache.set(key, { expires: Date.now() + NEGATIVE_CACHE_TTL, none: true });
-  return null;
+  return [];
+}
+
+// API legada (1 imagem) — usada apenas para o fallback do tópico do deck
+async function fetchWikiImage(term, hint) {
+  const cands = await fetchImageCandidates(term, hint);
+  return cands[0] || null;
 }
 
 async function enrichWithImages(cards, deckTopic) {
-  const fallback = deckTopic ? await fetchWikiImage(deckTopic) : null;
-  const fetched = await Promise.all(
+  // candidatos por card (em paralelo)
+  const candidatesPerCard = await Promise.all(
     cards.map(async (c) => {
       const subject = extractSubject(c.q);
-      let img = null;
-      if (subject && subject.length > 1) img = await fetchWikiImage(subject);
-      if (!img) img = fallback;
-      return img;
+      if (!subject || subject.length < 2) return [];
+      return await fetchImageCandidates(subject, deckTopic);
     }),
   );
+  // fallback: imagem mais "icônica" do tópico do deck
+  const fallback = deckTopic ? await fetchWikiImage(deckTopic) : null;
+
+  // atribui imagens evitando repetição dentro do mesmo deck
+  const used = new Set();
+  const assigned = candidatesPerCard.map((cands) => {
+    for (const cand of cands) {
+      if (!used.has(cand.url)) {
+        used.add(cand.url);
+        return cand;
+      }
+    }
+    // tudo já usado → escolhe a primeira mesmo assim (melhor repetir que ficar sem)
+    if (cands[0]) return cands[0];
+    // sem candidatos → fallback do tópico (só se ainda não foi usado)
+    if (fallback && !used.has(fallback.url)) {
+      used.add(fallback.url);
+      return fallback;
+    }
+    return fallback || null;
+  });
+
   return cards.map((c, i) => {
-    const img = fetched[i];
+    const img = assigned[i];
     if (img && !img.none) {
       return { ...c, image: img.url, imageAttribution: img.attribution, imagePage: img.pageUrl };
     }
@@ -403,6 +490,41 @@ app.delete('/api/decks/:id', (req, res) => {
   if (!decks.delete(req.params.id)) return res.status(404).json({ error: 'Deck não encontrado.' });
   persist();
   res.json({ ok: true });
+});
+
+app.post('/api/decks/:deckId/cards/:cardId/reimage', async (req, res) => {
+  const deck = decks.get(req.params.deckId);
+  if (!deck) return res.status(404).json({ error: 'Deck não encontrado.' });
+  const card = deck.cards.find((c) => c.id === req.params.cardId);
+  if (!card) return res.status(404).json({ error: 'Card não encontrado.' });
+
+  const subject = extractSubject(card.q);
+  if (!subject || subject.length < 2) {
+    return res.status(404).json({ error: 'Sem termo para buscar imagem.' });
+  }
+
+  let candidates = await fetchImageCandidates(subject, deck.title);
+  // se a busca direta deu vazio, tenta com a dica do deck
+  if (candidates.length === 0 && deck.title) {
+    candidates = await fetchImageCandidates(`${subject} ${deck.title}`, null);
+  }
+  if (candidates.length === 0) {
+    return res.status(404).json({ error: 'Nenhuma imagem encontrada para esse termo.' });
+  }
+  if (candidates.length === 1 && candidates[0].url === card.image) {
+    return res.status(409).json({ error: 'Sem outra imagem disponível para esse termo.' });
+  }
+
+  const currentIdx = card.image
+    ? candidates.findIndex((c) => c.url === card.image)
+    : -1;
+  const next = candidates[(currentIdx + 1) % candidates.length];
+
+  card.image = next.url;
+  card.imageAttribution = next.attribution;
+  card.imagePage = next.pageUrl;
+  persist();
+  res.json({ card });
 });
 
 app.post('/api/decks/:id/review', (req, res) => {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
+import { CardImage } from '../components/CardImage.jsx';
 
 const GRADES = [
   { q: 1, label: 'Errei', color: 'bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/40 dark:text-rose-300', kbd: '1' },
@@ -9,7 +10,7 @@ const GRADES = [
   { q: 5, label: 'Fácil', color: 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300', kbd: '4' },
 ];
 
-export function Study({ deck, onReview, onExit, onDone }) {
+export function Study({ deck, onReview, onReimage, onExit, onDone }) {
   const queueIds = useMemo(() => {
     const now = Date.now();
     const due = deck.cards.filter((c) => c.state.due <= now).map((c) => c.id);
@@ -88,16 +89,12 @@ export function Study({ deck, onReview, onExit, onDone }) {
           {/* Front */}
           <div className="card absolute inset-0 flex flex-col overflow-hidden [backface-visibility:hidden]">
             {card.image && (
-              <div className="h-40 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative">
-                <img
-                  src={card.image}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
-                />
-                <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white dark:from-slate-900 to-transparent" />
-              </div>
+              <CardImage
+                card={card}
+                onReimage={onReimage}
+                variant="banner"
+                height={160}
+              />
             )}
             <div className="flex-1 p-6 flex flex-col">
               <div className="text-[10px] uppercase tracking-widest text-brand-600 dark:text-brand-300 font-semibold">
@@ -120,16 +117,7 @@ export function Study({ deck, onReview, onExit, onDone }) {
           {/* Back */}
           <div className="card absolute inset-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] border-brand-300 dark:border-brand-800">
             {card.image && (
-              <div className="h-32 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative">
-                <img
-                  src={card.image}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
-                />
-                <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white dark:from-slate-900 to-transparent" />
-              </div>
+              <CardImage card={card} variant="banner" height={120} />
             )}
             <div className="flex-1 p-6 flex flex-col">
               <div className="text-[10px] uppercase tracking-widest text-brand-600 dark:text-brand-300 font-semibold">
